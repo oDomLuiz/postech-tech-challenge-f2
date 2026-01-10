@@ -1,0 +1,6 @@
+pandas = 2.2.3
+bs4 = 0.0.2
+requests = 2.32.3
+selenium = 4.28.1
+webdriver-manager = 4.0.2
+pyarrow = 19.0.0
