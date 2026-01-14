@@ -11,7 +11,7 @@ def lambda_handler(event, context):
         print(f"Novo arquivo detectado: s3://{bucket}/{key}")
     
     # Iniciar o job Glue
-    response = glue_client.start_job_run(JobName='etl_b3')  # Substitua pelo nome real
+    response = glue_client.start_job_run(JobName='etl_b3')
     print(f"Job Glue iniciado: {response['JobRunId']}")
     
     return {
