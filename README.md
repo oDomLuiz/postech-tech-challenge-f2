@@ -1,335 +1,286 @@
 # Tech Challenge - Fase 2: Pipeline Batch Bovespa | Ingestão e Arquitetura de Dados
 
-Este projeto é o entregável principal da Fase 1 da Pós-Graduação em **Machine Learning Engineering**. O objetivo é demonstrar habilidades em engenharia de dados, desenvolvimento de API e deploy, criando um pipeline completo para consulta de livros.
+Este projeto é o entregável principal da **Fase 2** da Pós-Graduação em **Machine Learning Engineering**. O objetivo é demonstrar habilidades em engenharia de dados, arquitetura cloud e processamento em larga escala, criando um pipeline completo para ingestão e transformação de dados da B3 (Bolsa de Valores Brasileira).
 
-O desafio consiste em desenvolver uma API pública para consulta de livros  começando pela extração dos dados (Web Scraping) de um site e terminando com o deploy da API em um ambiente de produção. Este README serve como documentação central do projeto.
-
----
-
-## 🚀 Links Importantes
-
-* **API em Produção (Vercel):** `https://postech-tech-challenge-f1.vercel.app/` 
-* **Documentação (Swagger UI):** `https://postech-tech-challenge-f1.vercel.app/apidocs/` 
-* **Vídeo de Apresentação:** `https://youtu.be/CBrRAyT5brU` 
+O desafio consiste em desenvolver um pipeline ETL (Extract, Transform, Load) que:
+1. **Extrai** dados da B3 via web scraping do IBOV (Índice Bovespa)
+2. **Transforma** os dados em formato otimizado para análise
+3. **Carrega** os dados em um data lake na AWS S3
 
 ---
 
-## 📐 Arquitetura do Projeto
+## 🏗️ Arquitetura do Projeto
 
-O pipeline de dados deste projeto foi estruturado em três etapas principais:
+O pipeline de dados foi estruturado em três etapas principais:
 
-1.  **Ingestão (Web Scraping):** Um script Python (`scripts/scrape_books.py`) foi desenvolvido para navegar pelo site `https://books.toscrape.com/`. Ele extrai informações detalhadas de todos os livros disponíveis (título, preço, rating, categoria, etc.)  e armazena esses dados localmente em um arquivo `data/books_data.csv`.
-2.  **API RESTful (Flask):** Uma aplicação web utilizando **Flask**  (`api/app.py`) serve como o backend. Ela lê o arquivo `.csv` e disponibiliza os dados através de múltiplos endpoints JSON. A API também inclui documentação interativa **Swagger** (via Flasgger) para fácil consulta e teste
-3.  **Deploy (Vercel):** A aplicação Flask foi configurada para ser hospedada na plataforma **Vercel**. O Vercel utiliza uma arquitetura *serverless*, onde a API é executada sob demanda. O arquivo `.csv` é comitado junto ao repositório e lido pela API em produção.
+### 1. **Ingestão (Web Scraping) - `src/scraping.py`**
+Um script Python automatizado que navega pelo site `https://sistemaswebb3-listados.b3.com.br/indexPage/day/IBOV`. Utiliza Selenium para fazer web scraping dinâmico dos dados do índice Bovespa, incluindo:
+- Código de negociação
+- Nome da ação
+- Tipo de ativo
+- Quantidade teórica
+- Participação percentual no índice
 
-### Diagrama Visual
+Os dados são salvos localmente em formato **Parquet particionado por data** (`b3_data/ano_mes_dia=YYYY-MM-DD/`) e posteriormente enviados para o **AWS S3** (bucket `fiap-luiz-mlet`).
 
-![Diagrama da Arquitetura](/docs/arquitetura_tech_challenge_f1.png)
+### 2. **Transformação (AWS Glue ETL) - `src/etl_glue.py`**
+Um job do AWS Glue que realiza transformações sofisticadas nos dados:
+- Lê dados da partição mais recente do S3
+- Renomeia colunas para padrão snake_case
+- Converte tipos de dados (strings para números)
+- Adiciona metadados (data de referência, dias desde última atualização)
+- Agrega dados por ação com totalizações
+- Salva dados refinados em S3 no formato Parquet particionado
+
+### 3. **Orquestração (AWS Lambda) - `src/lambda_function.py`**
+Uma função Lambda que atua como orquestradora do pipeline:
+- Monitora novos arquivos carregados no S3 (via S3 events)
+- Dispara automaticamente o job Glue quando novos dados chegam
+- Fornece logging e monitoramento do status de execução
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
-* **Linguagem:** Python
-* **Web Scraping:** `requests` e `BeautifulSoup4`
-* **Manipulação de Dados:** `Pandas` e `Numpy`
-* **Framework da API:** `Flask` 
-* **Documentação da API:** `Flasgger` (Swagger) 
-* **Plataforma de Deploy:** `Vercel` 
+* **Linguagem:** Python 3.9+
+* **Web Scraping:** `Selenium` e `WebDriver Manager`
+* **Manipulação de Dados:** `Pandas` e `PyArrow`
+* **Cloud (AWS):** 
+  - S3 (Data Lake)
+  - Glue (ETL)
+  - Lambda (Orquestração)
+* **Armazenamento:** `Parquet` (formato otimizado)
+* **Autenticação:** `python-dotenv` (variáveis de ambiente) 
 
 ---
 
-## ⚙️ Instalação e Execução Local
+## ⚙️ Instalação e Configuração
 
-Para reproduzir este projeto em sua máquina local, siga os passos abaixo:
+### Pré-requisitos
+- Python 3.9+
+- Chrome/Chromium instalado (para Selenium)
+- Conta AWS com credenciais configuradas
+- Variáveis de ambiente AWS (Access Key, Secret Key, Session Token)
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone [https://github.com/oDomLuiz/postech-tech-challenge-f1.git](https://github.com/oDomLuiz/postech-tech-challenge-f1.git)
-    cd postech-tech-challenge-f1
-    ```
+### Passo 1: Clone o Repositório
+```bash
+git clone <URL_DO_REPOSITORIO>
+cd postech-tech-challenge-f2
+```
 
-2.  **Crie e ative um ambiente virtual:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # No Windows: venv\Scripts\activate
-    ```
+### Passo 2: Crie e Ative o Ambiente Virtual
+```bash
+# Windows
+python -m venv .venv
+.venv\Scripts\activate
 
-3.  **Instale as dependências:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+# Linux/Mac
+python -m venv .venv
+source .venv/bin/activate
+```
 
-4.  **Execute o Web Scraping (Passo Obrigatório):**
-    O script irá criar o arquivo `data/books_data.csv` que a API precisa para funcionar.
-    ```bash
-    python scripts/scrape_books.py
-    ```
+### Passo 3: Instale as Dependências
+```bash
+pip install -r requirements.txt
+```
 
-5.  **Inicie o servidor da API:**
-    ```bash
-    python api/app.py
-    ```
-
-O servidor estará rodando em `http://127.0.0.1:5000`. Você pode acessar a documentação do Swagger em `http://127.0.0.1:5000/apidocs`.
+### Passo 4: Configure as Variáveis de Ambiente
+Crie um arquivo `.env` na raiz do projeto com suas credenciais AWS:
+```env
+ACCESS_KEY=sua_access_key_aqui
+SECRET_KEY=sua_secret_key_aqui
+SESSION_TOKEN=seu_session_token_aqui
+```
 
 ---
 
-## 📚 Documentação da API (Endpoints) 
+## 🚀 Execução
 
-A API foi estruturada com a URL base `/api/v1`.
+### Opção 1: Executar Scraping Manualmente
+```bash
+# Windows (via batch script)
+run_scraping.bat
 
-### Endpoints Obrigatórios 
+# Linux/Mac
+python src/scraping.py
+```
 
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Verifica o status da API e a conectividade com os dados.  |
-| `GET` | `/books` | Lista todos os livros disponíveis na base de dados.  |
-| `GET` | `/books/{id}` | Retorna detalhes completos de um livro específico pelo ID.  |
-| `GET` | `/books/search` | Busca livros por `title` (título) e/ou `category` (categoria).  |
-| `GET` | `/categories` | Lista todas as categorias de livros únicas disponíveis.  |
+### Opção 2: Agendar Scraping (Windows)
+O arquivo `run_scraping.bat` pode ser agendado via **Agendador de Tarefas do Windows**:
+1. Abrir Agendador de Tarefas
+2. Criar nova tarefa
+3. Agendar para executar `run_scraping.bat` em horários específicos
+4. Script ativa automaticamente o venv e executa o scraping
 
-### Endpoints Opcionais (Insights) 
+### Opção 3: Pipeline Completo (AWS)
+1. **Carregar o job Glue no AWS:**
+   - Upload do arquivo `src/etl_glue.py` para AWS Glue
+   - Configurar job com role IAM apropriado
+   - Usar PySpark engine
 
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/stats/overview` | Retorna estatísticas gerais: total de livros, preço médio e distribuição de ratings.  |
-| `GET` | `/stats/categories` | Retorna estatísticas detalhadas por categoria (contagem de livros, preço médio).  |
-| `GET` | `/books/top-rated` | Lista os livros com a melhor avaliação (5 estrelas).  |
-| `GET` | `/books/price-range` | Filtra livros dentro de uma faixa de preço (`min` e/ou `max`).  |
+2. **Configurar Lambda para orquestração:**
+   - Deploy de `src/lambda_function.py`
+   - Criar trigger S3 para detectar novos dados
+   - Lambda dispara automaticamente o job Glue
 
 ---
 
-## 💡 Exemplos de Chamadas (Request/Response) 
+## 📊 Fluxo de Dados
 
-Use a URL base do seu deploy (ou `http://127.0.0.1:5000`) para fazer as chamadas.
-
-### Exemplo 1: Verificar a saúde da API
-
-**Request:**
-`GET /api/v1/health`
-
-**Response (Exemplo):**
-```json
-{
-    "message": "API está operacional.",
-    "status": "healthy"
-}
+```
+B3 Website (IBOV)
+       ↓
+[Selenium Scraping] → parquet files (local)
+       ↓
+AWS S3 (raw/b3_data/) - Particionado por data
+       ↓
+[AWS Lambda Trigger]
+       ↓
+[AWS Glue ETL Job] - Transformação de dados
+       ↓
+AWS S3 (refined/b3_data/) - Dados processados
 ```
 
-### Exemplo 2: Listar todos os livros da biblioteca
+---
 
-**Request:**
-`GET /api/v1/books`
+## 📂 Estrutura de Arquivos
 
-**Response (Exemplo):**
-```json
-[
-    {
-        "availability": "In stock (22 available)",
-        "book_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
-        "category": "Poetry",
-        "id": 0,
-        "image_url": "https://books.toscrape.com/media/cache/fe/72/fe72f0532301ec28892ae79a629a293c.jpg",
-        "price": "£51.77",
-        "price_numeric": 51.77,
-        "rating": "Three de 5 estrelas",
-        "rating_numeric": 3,
-        "title": "A Light in the Attic"
-    },
-  ...
-]
+```
+postech-tech-challenge-f2/
+├── README.md                 # Este arquivo
+├── requirements.txt          # Dependências Python
+├── run_scraping.bat          # Script batch para Windows
+├── .env.example              # Template de variáveis de ambiente
+├── .venv/                    # Ambiente virtual
+├── b3_data/                  # Dados locais particionados por data
+│   ├── ano_mes_dia=2026-01-10/
+│   ├── ano_mes_dia=2026-01-11/
+│   └── ...
+└── src/
+    ├── scraping.py           # Web scraping da B3
+    ├── etl_glue.py           # ETL no AWS Glue
+    └── lambda_function.py    # Orquestração Lambda
 ```
 
-### Exemplo 3: Listar todas as categorias de livros da biblioteca
+---
 
-**Request:**
-`GET /api/v1/categories`
+## 🔧 Classes e Funcionalidades
 
-**Response (Exemplo):**
-```json
-{
-    "categories": [
-        "Poetry",
-        "Historical Fiction",
-        "Fiction",
-        "Mystery",
-        "History",
-        "Young Adult",
-        "Business",
-        "Default",
-        "Sequential Art",
-        "Music",
-        "Science Fiction",
-        "Politics",
-        "Travel",
-        "Thriller",
-        "Food and Drink",
-        "Romance",
-        "Childrens",
-        "Art",
-        "Spirituality",
-        "Nonfiction",
-        "Philosophy",
-        "New Adult",
-        "Contemporary",
-        "Fantasy",
-        "Add a comment",
-        "Science",
-        "Health",
-        "Horror",
-        "Self Help",
-        "Religion",
-        "Christian",
-        "Crime",
-        "Autobiography",
-        "Christian Fiction",
-        "Biography",
-        "Womens Fiction",
-        "Erotica",
-        "Cultural",
-        "Psychology",
-        "Humor",
-        "Historical",
-        "Novels",
-        "Short Stories",
-        "Suspense",
-        "Classics",
-        "Academic",
-        "Sports and Games",
-        "Adult Fiction",
-        "Parenting",
-        "Paranormal"
-    ]
-}
-```
+### `B3Scraper` (src/scraping.py)
+- **Responsabilidade:** Web scraping do IBOV na B3
+- **Métodos principais:**
+  - `setup_driver()` - Configura Chrome headless
+  - `get_all_pages_data()` - Navega e coleta dados de todas as páginas
+  - `scrape()` - Executa o scraping completo
 
-### Exemplo 4: Buscar livros por títlo e/ou categoria (título poetry e categoria poetry)
+### `DataProcessor` (src/scraping.py)
+- **Responsabilidade:** Processamento local dos dados
+- **Métodos principais:**
+  - `add_date_column()` - Adiciona coluna de data de ingestão
+  - `save_to_parquet()` - Salva em formato Parquet particionado
 
-**Request:**
-`GET /api/v1/books/search?title=poetry&category=poetry`
+### `S3Uploader` (src/scraping.py)
+- **Responsabilidade:** Upload para AWS S3
+- **Métodos principais:**
+  - `upload_files()` - Envia arquivos para data lake
 
-**Response (Exemplo):**
-```json
-[
-    {
-        "availability": "In stock (14 available)",
-        "book_url": "https://books.toscrape.com/catalogue/quarter-life-poetry-poems-for-the-young-broke-and-hangry_727/index.html",
-        "category": "Poetry",
-        "id": 271,
-        "image_url": "https://books.toscrape.com/media/cache/68/92/68922093080c377fa521ba64d8d372e1.jpg",
-        "price": "£50.89",
-        "price_numeric": 50.89,
-        "rating": "Five de 5 estrelas",
-        "rating_numeric": 5,
-        "title": "Quarter Life Poetry: Poems for the Young, Broke and Hangry"
-    },
-  ...
-]
-```
+### `GlueETL` (src/etl_glue.py)
+- **Responsabilidade:** Transformação de dados em escala
+- **Métodos principais:**
+  - `fetch_data()` - Lê dados do S3
+  - `rename_columns()` - Normaliza nomes de colunas
+  - `cast_columns()` - Converte tipos de dados
+  - `aggregate_data()` - Agrega dados por ação
+  - `run_etl()` - Executa pipeline completo
 
-### Exemplo 5: Buscar livro por ID (ID 50)
+---
 
-**Request:**
-`GET /api/v1/books/{{id}}`
+## 📈 Dados Processados
 
-**Response (Exemplo):**
-```json
-{
-    "availability": "In stock (16 available)",
-    "book_url": "https://books.toscrape.com/catalogue/throwing-rocks-at-the-google-bus-how-growth-became-the-enemy-of-prosperity_948/index.html",
-    "category": "Nonfiction",
-    "id": 50,
-    "image_url": "https://books.toscrape.com/media/cache/f4/21/f4210912ca58ef35f8ad120fe3dfed38.jpg",
-    "price": "£31.12",
-    "price_numeric": 31.12,
-    "rating": "Three de 5 estrelas",
-    "rating_numeric": 3,
-    "title": "Throwing Rocks at the Google Bus: How Growth Became the Enemy of Prosperity"
-}
-```
+### Colunas da B3 (Brutos)
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| Código | String | Código de negociação da ação |
+| Ação | String | Nome da ação |
+| Tipo | String | Tipo de ativo |
+| Qtde. Teórica | String | Quantidade teórica no índice |
+| Part. (%) | String | Participação percentual |
 
-### Exemplo 6: Buscar livros entre uma faixa de valores (mínimo 10 e máximo 15)
+### Colunas Processadas (Refinadas)
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| codigo | String | Código normalizado |
+| acao | String | Nome da ação |
+| tipo | String | Tipo de ativo |
+| quantidade_teorica | Long | Quantidade teórica (numérica) |
+| participacao_percentual | Float | Participação em % (numérica) |
+| quantidade_teorica_total | Long | Total de quantidade teórica |
+| quantidade_teorica_acao | Long | Total por ação |
+| participacao_percentual_acao | Float | Participação agregada por ação |
+| quantidade_dias_ultima_data_referencia | Int | Dias desde última atualização |
+| data_referencia | Date | Data de referência |
 
-**Request:**
-`GET /api/v1/books/price-range?min=10&max=15`
 
-**Response (Exemplo):**
-```json
-[
-    {
-        "availability": "In stock (19 available)",
-        "book_url": "https://books.toscrape.com/catalogue/starving-hearts-triangular-trade-trilogy-1_990/index.html",
-        "category": "Default",
-        "id": 10,
-        "image_url": "https://books.toscrape.com/media/cache/a0/7e/a07ed8f1c23f7b4baf7102722680bd30.jpg",
-        "price": "£13.99",
-        "price_numeric": 13.99,
-        "rating": "Two de 5 estrelas",
-        "rating_numeric": 2,
-        "title": "Starving Hearts (Triangular Trade Trilogy, #1)"
-    },
-  ...
-]
-```
+---
 
-### Exemplo 7: Buscar livros com avaliação 5 estrelas
+## 🔍 Monitoramento e Troubleshooting
 
-**Request:**
-`GET /api/v1/books/top-rated`
+### Problemas Comuns
 
-**Response (Exemplo):**
-```json
-[
-    {
-        "availability": "In stock (20 available)",
-        "book_url": "https://books.toscrape.com/catalogue/sapiens-a-brief-history-of-humankind_996/index.html",
-        "category": "History",
-        "id": 4,
-        "image_url": "https://books.toscrape.com/media/cache/ce/5f/ce5f052c65cc963cf4422be096e915c9.jpg",
-        "price": "£54.23",
-        "price_numeric": 54.23,
-        "rating": "Five de 5 estrelas",
-        "rating_numeric": 5,
-        "title": "Sapiens: A Brief History of Humankind"
-    },
-  ...
-]
-```
+#### 1. Erro ao conectar no Chrome
+**Erro:** `chromedriver version mismatch`
+**Solução:** O `webdriver-manager` baixa automaticamente a versão correta. Verifique se o Chrome está instalado.
 
-### Exemplo 8: Estatística dos livros por categorias
+#### 2. Erro ao fazer upload para S3
+**Erro:** `NoCredentialsError` ou `InvalidAccessKeyId`
+**Solução:** Verifique se o arquivo `.env` tem as credenciais AWS corretas e se a sessão não expirou.
 
-**Request:**
-`GET /api/v1/stats/categories`
+#### 3. Job Glue falhando
+**Erro:** `Error when reading data from S3`
+**Solução:** Verifique permissões IAM do role Glue, confirme que os dados foram efetivamente enviados para S3.
 
-**Response (Exemplo):**
-```json
-[
-    {
-        "average_price": 13.12,
-        "book_count": 1,
-        "category": "Academic"
-    },
-  ...
-]
-```
+---
 
-### Exemplo 9: Estatística geral dos livros
+## 📝 Logging
 
-**Request:**
-`GET /api/v1/stats/overview`
+Todos os scripts geram logs detalhados com timestamps:
+- **Nível de informação:** Operações completadas com sucesso
+- **Nível de alerta:** Diretórios não encontrados, arquivos vazios
+- **Nível de erro:** Falhas de conexão, conversão de dados inválida
 
-**Response (Exemplo):**
-```json
-{
-    "average_price": 35.08,
-    "rating_distribution": {
-        "1": 226,
-        "2": 196,
-        "3": 202,
-        "4": 179,
-        "5": 195
-    },
-    "total_books": 998
-}
-```
+Logs são exibidos no console e podem ser redirecionados para arquivos.
+
+---
+
+## 🤝 Contribuindo
+
+Para contribuir com melhorias:
+1. Crie uma branch para sua feature (`git checkout -b feature/melhoria`)
+2. Commit suas mudanças (`git commit -m 'Adiciona melhoria'`)
+3. Push para a branch (`git push origin feature/melhoria`)
+4. Abra um Pull Request
+
+---
+
+## 📚 Documentação Adicional
+
+- [AWS Glue Documentation](https://docs.aws.amazon.com/glue/)
+- [Selenium Documentation](https://www.selenium.dev/documentation/)
+- [PyArrow / Parquet Documentation](https://arrow.apache.org/docs/python/)
+- [B3 - Bovespa](https://www.b3.com.br/)
+
+---
+
+## 👨‍💻 Autor
+
+**Projeto:** Tech Challenge - Fase 2  
+**Pós-Graduação:** Machine Learning Engineering - FIAP  
+**Data:** Janeiro 2026
+
+---
+
+## 📄 Licença
+
+Este projeto é parte do currículo da FIAP e segue a política institucional de uso.
+
+````
