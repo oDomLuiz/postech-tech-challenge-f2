@@ -10,3 +10,6 @@ __pycache__/
 # Arquivos do S.O.
 .DS_Store
 Thumbs.db
+
+# Dados
+b3_data/
